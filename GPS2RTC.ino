@@ -1,17 +1,10 @@
-#include <SPI.h>
+// Set RTC DS3231 with GPS date and time
 #include <Wire.h>
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 
 #define DS3231_I2C_ADDRESS 0x68
 #define LEAP_YEAR(Y) ((Y>0) && !(Y%4) && ( (Y%100) || !(Y%400) )) // from time-lib
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET     -1
-
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 static const int RXPin = 4, TXPin = 3;
 static const uint32_t GPSBaud = 9600;
@@ -21,11 +14,8 @@ byte second, minute, hour, dayOfWeek, day, month, year;
 
 void setup () {
   Serial.begin(9600);
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  display.clearDisplay();
-  display.display();
-  delay(100);
 
+  // Read and display the current date & time of the RTC
   readDS3231time(&second, &minute, &hour, &dayOfWeek, &day, &month,  &year);
   Serial.print("RTC Time: ");
   Serial.print(day < 10 ? "0" : "");
@@ -53,12 +43,16 @@ void loop () {
   while (ss.available() > 0)
     if (gps.encode(ss.read()))
     {
+      // When date & time of the GPS are valid set the RTC
       if (gps.date.isValid() && gps.time.isValid())
       {
-        dayOfWeek=CalculateDayOfWeek(gps.date.year() + 2000, gps.date.month(), gps.date.day());
+        // Calculate the day of the week
+        dayOfWeek = CalculateDayOfWeek(gps.date.year() + 2000, gps.date.month(), gps.date.day());
         Serial.println(dayOfWeek);
-        setDS3231time(gps.time.second(), gps.time.minute(), gps.time.hour() + 2, dayOfWeek-1, gps.date.day(), gps.date.month(), gps.date.year()-2000);
-        
+        // set the RTC date & time
+        setDS3231time(gps.time.second(), gps.time.minute(), gps.time.hour() + 2, dayOfWeek, gps.date.day(), gps.date.month(), gps.date.year() - 2000);
+
+        // Display the date & time of the RTC
         Serial.print("GPS Time: ");
         if (gps.date.day() < 10) Serial.print(F("0"));
         Serial.print(gps.date.day());
@@ -76,7 +70,8 @@ void loop () {
         Serial.print(F(":"));
         if (gps.time.second() < 10) Serial.print(F("0"));
         Serial.println(gps.time.second());
-        
+
+        // Done
         while (true);
       }
 
@@ -132,13 +127,13 @@ void readDS3231time(byte *second, byte *minute, byte *hour, byte *dayOfWeek, byt
 
 byte CalculateDayOfWeek(byte year, byte month, byte day)
 {
-  byte months[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 };   // days until 1st of month
+  int months[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 };   // days until 1st of month
 
   uint32_t days = year * 365;        // days until year
   for (int i = 4; i < year; i += 4) if (LEAP_YEAR(i) ) days++;     // adjust leap years, test only multiple of 4 of course
 
   days += months[month - 1] + day;  // add the days of this year
-  if ((month > 2) && LEAP_YEAR(year)) days++;  // adjust 1 if this year is a leap year, but only after febr
+  if ((month > 2) && LEAP_YEAR(year)) days++;  // adjust 1 if this year is a leap year, but only after february
 
   return days % 7;   // remove all multiples of 7
 }
